@@ -1,0 +1,44 @@
+services:
+  localstack:
+    image: localstack/localstack
+    ports:
+      - "4566:4566"
+      - "4571:4571"
+    environment:
+      - SERVICES=s3
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    networks:
+      - aws-s3-demo
+  backend:
+    build:
+      context: backend
+      dockerfile: Dockerfile
+    command: sh -c "npm install && npm run dev"
+    environment:
+      - AWS_S3_ENDPOINT=http://localstack:4566
+      - AWS_S3_BUCKET_NAME=demo
+      - AWS_S3_BUCKET_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_SECRET_KEY=test
+    ports:
+      - "3000:8080"
+    volumes:
+      - ./backend:/var/task
+    networks:
+      - aws-s3-demo
+  frontend:
+    image: node:20
+    command: sh -c "npm install && npm run dev -- --host"
+    ports:
+      - "8080:5173"
+    volumes:
+      - ./frontend:/app
+    working_dir: /app
+    networks:
+      - aws-s3-demo
+
+networks:
+  aws-s3-demo:
+    driver: bridge

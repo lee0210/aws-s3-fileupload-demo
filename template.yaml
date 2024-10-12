@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: aws s3 file upload demo
+
+Parameters:
+  StageName:
+    Type: String
+    Description: "The name of the stage (e.g., dev, prod)"
+    Default: "v1"
+  BucketName:
+    Type: String
+    Description: "Name of the S3 bucket to upload images"
+    Default: 'image-upload-bucket'
+
+Globals:
+  Function:
+    Timeout: 60
+
+Resources:
+  ImageUploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-${BucketName}-${AWS::AccountId}-${AWS::Region}"
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedHeaders:
+              - "*"
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3000
+
+  ImageProcessingFunction:
+    Type: AWS::Serverless::Function
+    Properties: 
+      Handler: compressImg.lambda_handler
+      Runtime: python3.9
+      CodeUri: ./lambda/  
+      MemorySize: 128
+      Timeout: 30
+      Events:
+        S3ImageUploadEventJpeg:
+          Type: S3
+          Properties:
+            Bucket: !Ref ImageUploadBucket
+            Events: s3:ObjectCreated:*
+            Filter: 
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: ".jpeg"
+        S3ImageUploadEventPng:
+          Type: S3
+          Properties:
+            Bucket: !Ref ImageUploadBucket
+            Events: s3:ObjectCreated:*
+            Filter: 
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: ".png"
+        S3ImageUploadEventJpg:
+          Type: S3
+          Properties:
+            Bucket: !Ref ImageUploadBucket
+            Events: s3:ObjectCreated:*
+            Filter: 
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: ".jpg"
+      Environment:
+        Variables:
+          BUCKET_NAME: !Sub "${AWS::StackName}-${BucketName}-${AWS::AccountId}-${AWS::Region}"
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub "${AWS::StackName}-${BucketName}-${AWS::AccountId}-${AWS::Region}"
+        - S3WritePolicy:
+            BucketName: !Sub "${AWS::StackName}-${BucketName}-${AWS::AccountId}-${AWS::Region}"
+
+  BackendApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+
+  ExpressFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Architectures:
+        - arm64
+      MemorySize: 1024 
+      Policies:
+        - S3FullAccessPolicy:
+            BucketName: !Ref ImageUploadBucket
+      Environment:
+        Variables:
+          API_STAGE_NAME: !Ref StageName
+          AWS_S3_BUCKET_NAME: !Ref ImageUploadBucket
+          AWS_S3_BUCKET_REGION: !Ref AWS::Region
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BackendApi
+            Path: /{proxy+}
+            Method: ANY
+    Metadata:
+      DockerTag: v1
+      DockerContext: ./backend
+      Dockerfile: Dockerfile
+
+Outputs:
+  S3BucketName:
+    Description: "Name of the S3 bucket to upload images"
+    Value: !Ref ImageUploadBucket
+  ExpressApi:
+    Description: "API Gateway endpoint URL for Prod stage for Express function"
+    Value: !Sub "https://${BackendApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/"

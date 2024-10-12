@@ -1,0 +1,26 @@
+{
+  "name": "app-backend",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "nodemon src/app.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.668.0",
+    "@aws-sdk/s3-presigned-post": "^3.668.0",
+    "@aws-sdk/s3-request-presigner": "^3.668.0",
+    "cors": "^2.8.5",
+    "express": "^4.20.0",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/preset-env": "^7.25.4",
+    "babel-jest": "^29.7.0",
+    "nodemon": "^3.1.4"
+  }
+}
