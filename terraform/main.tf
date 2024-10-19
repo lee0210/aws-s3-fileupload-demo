@@ -5,6 +5,17 @@ provider "aws" {
   }
 }
 
+provider "docker" {
+  registry_auth {
+    address  = format("%v.dkr.ecr.%v.amazonaws.com", data.aws_caller_identity.current.account_id, var.region)
+    username = data.aws_ecr_authorization_token.ecr_auth_token.user_name
+    password = data.aws_ecr_authorization_token.ecr_auth_token.password
+  }
+}
+
+data "aws_caller_identity" "current" {}
+data "aws_ecr_authorization_token" "ecr_auth_token" {}
+
 resource "random_string" "resource_suffix" {
   length  = 8
   special = false
@@ -46,35 +57,18 @@ resource "aws_s3_bucket_cors_configuration" "image_upload_bucket_cors" {
 # Express API Docker image and Lambda function   #
 #------------------------------------------------#
 
-resource "aws_ecr_repository" "express_api_ecr_repo" {
-  name = "${var.resource_prefix}-${random_string.resource_suffix.result}/${var.image_name}-${random_string.resource_suffix.result}"
-}
-
-data "external" "docker_image_id" {
-  program = ["sh", "-c", "docker inspect --format='{{json .Id}}' ${var.image_name}:${var.image_tag} | jq -n '{output: input}'"]
-}
-
-resource "null_resource" "upload_express_image" {
-  triggers = {
-    image_hash = data.external.docker_image_id.result.output
-  }
-
-  provisioner "local-exec" {
-    command = <<EOF
-        set -e
-        aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.express_api_ecr_repo.repository_url}
-        docker tag ${var.image_name}:${var.image_tag} ${aws_ecr_repository.express_api_ecr_repo.repository_url}:${var.image_tag}
-        docker push ${aws_ecr_repository.express_api_ecr_repo.repository_url}:${var.image_tag}
-    EOF
-  }
-
-  depends_on = [aws_ecr_repository.express_api_ecr_repo]
-
+module "docker_image" {
+  source = "terraform-aws-modules/lambda/aws//modules/docker-build"
+  create_ecr_repo = true
+  ecr_repo        = "express-app"
+  use_image_tag = true
+  image_tag     = "1.0"
+  source_path     = "../backend"
 }
 
 resource "aws_lambda_function" "express_app" {
   function_name = "${var.resource_prefix}-express-app-${random_string.resource_suffix.result}"
-  image_uri     = "${aws_ecr_repository.express_api_ecr_repo.repository_url}:${var.image_tag}"
+  image_uri     = module.docker_image.image_uri
   role          = aws_iam_role.express_app_role.arn
   package_type  = "Image"
   memory_size   = 1024
@@ -87,8 +81,6 @@ resource "aws_lambda_function" "express_app" {
       AWS_S3_BUCKET_REGION = var.region
     }
   }
-
-  depends_on = [null_resource.upload_express_image]
 }
 
 resource "aws_iam_role" "express_app_role" {

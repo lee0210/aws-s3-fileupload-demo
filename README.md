@@ -28,12 +28,18 @@ Local environment uses [localstack](https://www.localstack.cloud/), which does N
 
 ---
 
-```sh
+```bash
 # deploy to aws
 sam build && sam deploy --guided
 ```
 
 There will be an ApiGateway url in the output. Change the .env file in the frontend with the ApiGateway url to upload file to AWS S3 bucket
+
+```bash
+# use terraform
+cd terraform
+make
+```
 
 ## Hints
 
@@ -72,6 +78,8 @@ Resources:
         - S3WritePolicy:
             BucketName: !Sub "${AWS::StackName}-${BucketName}-${AWS::AccountId}-${AWS::Region}"
 ```
+
+3. If you encouter 403 error during docker build when using terraform, check the docker setting "useContainerdSnapshotter". The value should be false.
 
 
 
